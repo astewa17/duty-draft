@@ -3,20 +3,24 @@
    remote-play guidance, enter the War Room.
    ============================================================ */
 
-function SignIn() {
+function SignIn({ onOpen }) {
   const { doc, dispatch, myRole, claimRole, presence } = useDraft();
-  const [name, setName] = React.useState('');
 
   const claim = (role) => {claimRole(role, doc.names[role] || '');};
-  const saveName = (v) => {setName(v);if (myRole && myRole !== 'view') claimRole(myRole, v);};
+  // write the name straight to the synced doc (no local state, so the input
+  // never remounts mid-typing — that was the "one letter at a time" bug).
+  const saveName = (v) => {if (myRole && myRole !== 'view') dispatch({ t: 'name', role: myRole, name: v });};
 
-  const RoleCard = ({ role }) => {
+  // NOTE: this is a plain render function, NOT a nested <Component>. Returning
+  // a component defined inside SignIn gives it a new identity every render,
+  // which makes React remount the <input> and drop focus after each keystroke.
+  const renderRole = (role) => {
     const p = WR.VPS[role];
     const mine = myRole === role;
     const live = presence[role];
     const named = doc.names[role];
     return (
-      <button onClick={() => claim(role)} className={'lift' + (mine ? ' glow' : '')}
+      <button key={role} onClick={() => claim(role)} className={'lift' + (mine ? ' glow' : '')}
       style={{ textAlign: 'left', cursor: 'pointer', flex: 1, minWidth: 0, background: 'var(--panel)', color: 'var(--on-panel)',
         border: '1px solid var(--line)', borderRadius: 18, padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -29,11 +33,11 @@ function SignIn() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700 }}>
           <span style={{ width: 9, height: 9, borderRadius: 99, background: live ? 'var(--brand)' : 'var(--muted)', boxShadow: live ? '0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent)' : 'none' }} />
           <span style={{ color: live ? 'var(--on-panel)' : 'var(--muted)' }}>
-            {mine ? 'You — connected' : live ? `Connected${named ? ' · ' + named : ''}` : named ? `${named} (away)` : 'Open — tap to take this seat'}
+            {mine ? 'You, connected' : live ? `Connected${named ? ' · ' + named : ''}` : named ? `${named} (away)` : 'Open. Tap to take this seat.'}
           </span>
         </div>
         {mine &&
-        <input value={name || named || ''} onChange={(e) => saveName(e.target.value)} placeholder="Your name (optional)"
+        <input value={named || ''} onChange={(e) => saveName(e.target.value)} placeholder="Your name (optional)"
         onClick={(e) => e.stopPropagation()}
         style={{ font: 'inherit', fontSize: 14, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--on-panel)', outline: 'none' }} />
         }
@@ -52,17 +56,17 @@ function SignIn() {
             The Duty Draft <span style={{ color: 'var(--brand)' }}>'26</span>
           </div>
         </div>
-        <Logo which="sba" size={64} title="McGeorge SBA" />
+        <Logo which="sba" size={64} bare title="McGeorge SBA" />
       </div>
 
       <div style={{ width: '100%', maxWidth: 960, fontSize: 16, color: 'var(--muted)', marginBottom: 26, lineHeight: 1.5 }}>
-        Day VP &amp; Evening VP take turns drafting the issues &amp; committees each will own — straight alternating, balanced by a tiger-paw cap. Sign in below.
+        Day VP and Evening VP take turns drafting the issues and committees each will own. Picks alternate back and forth, kept balanced by a per-VP workload cap. Sign in below.
       </div>
 
       {/* seats */}
       <div style={{ width: '100%', maxWidth: 960, display: 'flex', gap: 18 }}>
-        <RoleCard role="day" />
-        <RoleCard role="eve" />
+        {renderRole('day')}
+        {renderRole('eve')}
       </div>
 
       {/* remote-play note + actions */}
@@ -70,7 +74,7 @@ function SignIn() {
         <div style={{ flex: 1, minWidth: 260 }}>
           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Drafting from different places?</div>
           <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Each VP opens this on their own device and takes the opposite seat — the board stays in sync live. (Cross-window sync works now; true cross-internet sync uses a hosted backend, spec’d for handoff.)
+            Each VP opens this on their own device and takes the opposite seat. The board stays in sync live across the internet once cross-internet sync is set up in Curator Mode (otherwise it syncs between windows on one device).
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -87,14 +91,19 @@ function SignIn() {
 
       {/* enter */}
       <div style={{ width: '100%', maxWidth: 960, display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '24px 0 48px', gap: 16, flexWrap: 'wrap' }}>
-        <button onClick={() => claimRole('view')} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13.5, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-          Just watching
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <button onClick={() => claimRole('view')} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13.5, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            Just watching
+          </button>
+          <button onClick={() => onOpen && onOpen('curator')} style={{ cursor: 'pointer', background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--on-panel)', fontSize: 13.5, fontWeight: 700, padding: '10px 16px', borderRadius: 11 }}>
+            ⚙ Curator Mode
+          </button>
+        </div>
         <button disabled={!myRole} onClick={() => {dispatch({ t: 'toReady' });}}
         className="feature-bar"
         style={{ cursor: myRole ? 'pointer' : 'not-allowed', opacity: myRole ? 1 : .5, fontWeight: 800, fontSize: 16,
           padding: '15px 30px', borderRadius: 14, border: 'none', letterSpacing: '.02em', boxShadow: '0 8px 22px var(--shadow-2)' }}>
-          {presence.day && presence.eve ? 'Both VPs ready — enter the War Room →' : 'Enter the War Room →'}
+          {presence.day && presence.eve ? 'Both VPs ready. Enter the War Room →' : 'Enter the War Room →'}
         </button>
       </div>
     </div>);

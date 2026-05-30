@@ -13,7 +13,7 @@ function CapMeter({ role }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-        <span className="mono" style={{ fontSize: 10, letterSpacing: '.12em', color: 'var(--muted)' }}>CAP LOAD</span>
+        <span className="mono" style={{ fontSize: 10, letterSpacing: '.12em', color: 'var(--muted)' }}>WORKLOAD</span>
         <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>{load}<span style={{ color: 'var(--muted)' }}>/{cap}</span> <span style={{ color: col }}>· {left <= 0 ? 'FULL' : left + ' left'}</span></span>
       </div>
       <div className="inset" style={{ height: 9, borderRadius: 99, background: 'var(--panel-2)', overflow: 'hidden' }}>
@@ -42,10 +42,16 @@ function Rail({ role, side, actor, canPick }) {
         {(canPick && actor === role && doc.phase === 'draft' && !doc.pending) && (
           <button onClick={() => dispatch({ t: 'pass', role })}
             style={{ marginTop: 11, width: '100%', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, padding: '9px', borderRadius: 9, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--muted)' }}>
-            I’m set — pass remaining
+            I’m set. Pass remaining.
           </button>
         )}
       </div>
+      {doc.showChart && (
+        <div className="card" style={{ borderRadius: 14, padding: '13px 14px', flex: '0 0 auto' }}>
+          <div className="mono" style={{ fontSize: 9.5, letterSpacing: '.12em', color: 'var(--muted)', marginBottom: 10 }}>FOCUS BY CATEGORY</div>
+          <CategoryDonut role={role} size={118} />
+        </div>
+      )}
       <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 7, overflowY: 'auto', minHeight: 0, flex: 1, paddingRight: 2 }}>
         {owned.map((m) => (
           <div key={m.id} className="card lift" style={{ borderRadius: 9, padding: m.type === 'committee' ? '7px 10px 7px 14px' : '10px 11px', borderLeft: `4px solid ${WR.CATS[m.cat].color}`, marginLeft: m.type === 'committee' ? 16 : 0 }}>
@@ -66,15 +72,31 @@ function DraftBtn({ item, actor, canPick, child }) {
   const { doc, dispatch, sel } = useDraft();
   const owner = doc.owners[item.id];
   if (owner) {
-    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800 }}>
-      <VPBadge role={owner} size={20} /> <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{owner === 'shared' ? 'SHARED' : 'TAKEN'}</span>
-    </span>;
+    const supporters = (doc.collab && doc.collab[item.id]) || [];
+    const iSupport = supporters.includes(actor);
+    const canCollab = doc.collabOn && canPick && owner !== 'shared' && owner !== actor &&
+      (doc.phase === 'draft' || doc.phase === 'review') &&
+      (iSupport || (sel.load(doc, actor) + 1 <= doc.capPaws && (Object.values(doc.collab || {}).filter((arr) => arr.includes(actor)).length < 2)));
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 800 }}>
+        <VPBadge role={owner} size={20} /> <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{owner === 'shared' ? 'SHARED' : 'LEAD'}</span>
+        {supporters.map((r) => <VPBadge key={r} role={r} size={18} ring="var(--highlight)" />)}
+        {canCollab && (
+          <button onClick={() => dispatch({ t: 'collabToggle', id: item.id, role: actor })}
+            title={iSupport ? 'Remove your support' : 'Flag interest to support this (+1 workload)'}
+            style={{ cursor: 'pointer', fontWeight: 800, fontSize: 10, letterSpacing: '.03em', padding: '5px 9px', borderRadius: 7, border: '1px solid var(--highlight)',
+              background: iSupport ? 'var(--highlight)' : 'transparent', color: iSupport ? 'var(--on-highlight)' : 'var(--accent-text)' }}>
+            {iSupport ? 'SUPPORTING ✓' : '+ COLLABORATE'}
+          </button>
+        )}
+      </span>
+    );
   }
   const afford = sel.affordable(doc, item, actor);
   const live = canPick && doc.phase === 'draft' && afford && (!doc.pending || (child && doc.pending.by === actor));
   const act = () => { if (!live) return; dispatch(child && doc.pending ? { t: 'addChild', id: item.id } : { t: 'draft', id: item.id, role: actor }); };
   return (
-    <button onClick={act} disabled={!live} title={!afford ? `Needs ${item.paws} paws — over cap` : ''}
+    <button onClick={act} disabled={!live} title={!afford ? `Over cap by ${item.paws}` : ''}
       style={{ cursor: live ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: child ? 10.5 : 11.5, letterSpacing: '.04em',
         padding: child ? '5px 9px' : '7px 12px', borderRadius: 8, border: afford ? 'none' : '1px dashed var(--line)',
         background: live ? 'var(--brand)' : afford ? 'color-mix(in srgb, var(--brand) 22%, var(--panel))' : 'transparent',
@@ -121,7 +143,7 @@ function OfferBar({ actor, canPick }) {
   return (
     <div className="card" style={{ borderRadius: 14, padding: '13px 16px', borderLeft: '5px solid var(--highlight)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 200 }}>
-        <div className="mono" style={{ fontSize: 10, letterSpacing: '.14em', color: 'var(--highlight)' }}>BONUS — RELATED COMMITTEES</div>
+        <div className="mono" style={{ fontSize: 10, letterSpacing: '.14em', color: 'var(--highlight)' }}>BONUS · RELATED COMMITTEES</div>
         <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 3 }}>{mine ? `You drafted “${issue.name}.” Grab its committees?` : `${WR.VPS[doc.pending.by].role} is choosing committees…`}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -142,7 +164,7 @@ function Ticker() {
   const items = doc.log.slice(0, 10);
   const text = items.length
     ? items.map((l) => `${WR.VPS[l.by].short} VP selects ${l.name}`).join('   ◆   ')
-    : 'The draft is live — first pick is on the clock';
+    : 'The draft is live. First pick is on the clock.';
   return (
     <div className="feature-bar" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 18px', height: 42, overflow: 'hidden' }}>
       <span className="mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.12em', background: 'var(--highlight)', color: 'var(--on-highlight)', padding: '4px 9px', borderRadius: 6, flex: '0 0 auto' }}>THE PICK IS IN</span>
@@ -172,7 +194,7 @@ function Toast() {
       <div className="feature-bar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderRadius: 13, boxShadow: '0 12px 30px var(--shadow-2)' }}>
         <VPBadge role={t.by} size={32} ring="var(--highlight)" />
         <div><div className="mono" style={{ fontSize: 9.5, letterSpacing: '.18em', opacity: .8 }}>THE PICK IS IN</div>
-          <div className="cond" style={{ fontSize: 19, fontWeight: 800, textTransform: 'uppercase', lineHeight: 1 }}>{WR.VPS[t.by].short} VP — {t.name}</div></div>
+          <div className="cond" style={{ fontSize: 19, fontWeight: 800, textTransform: 'uppercase', lineHeight: 1 }}>{WR.VPS[t.by].short} VP · {t.name}</div></div>
       </div>
     </div>
   );
@@ -197,7 +219,7 @@ function Board({ onOpen, solo, setSolo }) {
         <span className="mono" style={{ fontSize: 11, opacity: .8, fontWeight: 700, border: '1px solid color-mix(in srgb, var(--on-accent) 35%, transparent)', borderRadius: 6, padding: '4px 9px' }}>{doc.pickOrder.filter((id)=>doc.owners[id]!=='shared').length} PICKS</span>
         <SyncBadge />
         <div style={{ flex: 1 }} />
-        <Logo which="sba" size={30} pad={0.05} title="McGeorge SBA" />
+        <Logo which="sba" size={34} bare title="McGeorge SBA" />
         <ThemeBar />
         <div style={{ display: 'flex', gap: 7 }}>
           <button onClick={() => onOpen('directory')} style={topBtn}>Directory</button>
@@ -216,7 +238,7 @@ function Board({ onOpen, solo, setSolo }) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="mono" style={{ fontSize: 10.5, letterSpacing: '.16em', opacity: .9 }}>{canPick ? 'YOUR PICK' : myRole === 'view' ? 'SPECTATING' : 'PLEASE WAIT'}</div>
-          <div className="cond" style={{ fontSize: 17, fontWeight: 700 }}>{doc.capPaws - sel.load(doc, actor)} paws under cap</div>
+          <div className="cond" style={{ fontSize: 17, fontWeight: 700 }}>{doc.capPaws - sel.load(doc, actor)} under cap</div>
         </div>
       </div>
 
@@ -241,7 +263,7 @@ function Board({ onOpen, solo, setSolo }) {
               {shown.map((it) => <IssueCard key={it.id} item={it} actor={actor} canPick={canPick} onOpen={onOpen} />)}
               {orphans.map((it) => <IssueCard key={it.id} item={it} actor={actor} canPick={canPick} onOpen={onOpen} />)}
             </div>
-            {sharedCount > 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 14 }}>{sharedCount} item(s) in the shared / unassigned pile — see Results.</div>}
+            {sharedCount > 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 14 }}>{sharedCount} item(s) in the shared / unassigned pile. See Results.</div>}
           </div>
         </div>
 

@@ -211,7 +211,7 @@ function ReviewRoom({ onOpen }) {
           <VPBadge role={role} size={36} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="cond" style={{ fontSize: 18, fontWeight: 800, textTransform: 'uppercase', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.names[role] || WR.VPS[role].role}</div>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{items.length} DUTIES · {load} PAWS</div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{items.length} DUTIES · {load} WEIGHT</div>
           </div>
           {doc.ready[role] && <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', color: 'var(--brand)', border: '1px solid var(--brand)', borderRadius: 6, padding: '3px 7px' }}>READY ✓</span>}
         </div>
@@ -237,7 +237,7 @@ function ReviewRoom({ onOpen }) {
         {final && <span className="mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.14em', background: 'var(--highlight)', color: 'var(--on-highlight)', padding: '4px 10px', borderRadius: 6 }}>● DUTIES FINALIZED</span>}
         <SyncBadge />
         <div style={{ flex: 1 }} />
-        <Logo which="sba" size={30} pad={0.05} title="McGeorge SBA" />
+        <Logo which="sba" size={34} bare title="McGeorge SBA" />
         <ThemeBar />
         <div style={{ display: 'flex', gap: 7 }}>
           <button onClick={() => onOpen('directory')} style={topBtn}>Directory</button>

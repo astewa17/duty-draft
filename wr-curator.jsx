@@ -66,10 +66,30 @@ function CuratorPanel({ onClose }) {
     </span>
   );
 
+  const pickPhoto = (e, role) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const S = 160; const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+        const cx = cv.getContext('2d');
+        const scale = Math.max(S / img.width, S / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        cx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+        dispatch({ t: 'setVpPhoto', role, url: cv.toDataURL('image/jpeg', 0.82) });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const saveTemplate = () => {
     window.WRC.set({
       year: doc.year, capDefault: doc.capPaws, firstPick: doc.firstPick,
       pool: doc.items, contacts: doc.contacts,
+      showChart: doc.showChart, showPhotos: doc.showPhotos, vpPhotos: doc.vpPhotos, collabOn: doc.collabOn,
     });
     setSaved(true); setTimeout(() => setSaved(false), 2200);
   };
@@ -99,7 +119,7 @@ function CuratorPanel({ onClose }) {
           <input value={doc.year} onChange={(e) => dispatch({ t: 'setYear', v: e.target.value })} style={{ ...cInput, width: 110 }} placeholder="'26" />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 700 }}>Per-VP paw cap</span>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Per-VP workload cap</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => dispatch({ t: 'setCap', v: doc.capPaws - 1 })} style={cStep}>−</button>
             <span className="mono" style={{ fontWeight: 700, width: 30, textAlign: 'center' }}>{doc.capPaws}</span>
@@ -114,6 +134,41 @@ function CuratorPanel({ onClose }) {
             ))}
           </div>
         </div>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Focus chart</span>
+          <button onClick={() => dispatch({ t: 'setShowChart', v: !doc.showChart })} style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 9, border: '1px solid var(--line)', background: doc.showChart ? 'var(--secondary)' : 'var(--panel-2)', color: doc.showChart ? 'var(--on-secondary)' : 'var(--muted)' }}>{doc.showChart ? 'On' : 'Off'}</button>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Collaboration</span>
+          <button onClick={() => dispatch({ t: 'setCollabOn', v: !doc.collabOn })} style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 9, border: '1px solid var(--line)', background: doc.collabOn ? 'var(--secondary)' : 'var(--panel-2)', color: doc.collabOn ? 'var(--on-secondary)' : 'var(--muted)' }}>{doc.collabOn ? 'On' : 'Off'}</button>
+        </label>
+      </div>
+      {doc.collabOn && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8, lineHeight: 1.4 }}>Collaboration on: a VP may flag interest to support the other VP’s issue. The lead still owns it; supporting costs the helper +1 workload, so the cap still prevents overloading.</div>}
+
+      {/* VP profile photos */}
+      <div style={cSection}>VP profile photos</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => dispatch({ t: 'setShowPhotos', v: !doc.showPhotos })} style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700, padding: '8px 14px', borderRadius: 9, border: '1px solid var(--line)', background: doc.showPhotos ? 'var(--secondary)' : 'var(--panel-2)', color: doc.showPhotos ? 'var(--on-secondary)' : 'var(--muted)' }}>
+          Photos {doc.showPhotos ? 'on' : 'off'}
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{doc.showPhotos ? 'Showing photos where set; initials otherwise.' : 'Using the colored initials badges.'}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 26 }}>
+        {['day', 'eve'].map((r) => (
+          <div key={r} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <VPBadge role={r} size={54} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{r === 'day' ? 'Day VP' : 'Evening VP'}</span>
+              <div style={{ display: 'flex', gap: 7 }}>
+                <label style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--on-panel)' }}>
+                  {doc.vpPhotos && doc.vpPhotos[r] ? 'Change photo' : 'Add photo'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => pickPhoto(e, r)} />
+                </label>
+                {doc.vpPhotos && doc.vpPhotos[r] && <button onClick={() => dispatch({ t: 'setVpPhoto', role: r, url: null })} style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb,#d9483b 40%,var(--line))', background: 'transparent', color: '#d9483b' }}>Remove</button>}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* base pool + weights + descriptions */}
@@ -146,6 +201,10 @@ function CuratorPanel({ onClose }) {
       ))}
       <button onClick={() => dispatch({ t: 'itemAdd', item: { id: 'x' + Date.now(), type: 'issue', name: 'New issue', cat: 'ops', paws: 2, blurb: '' } })}
         style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13, padding: '9px 15px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--on-panel)' }}>+ Add an issue</button>
+
+      {/* contacts directory (prep before the draft) */}
+      <div style={cSection}>Contacts directory</div>
+      <CuratorContacts />
 
       {/* cross-internet sync */}
       <div style={cSection}>Cross-internet sync (Firebase)</div>
@@ -266,6 +325,80 @@ function ContactsPeek({ issueId, onOpen }) {
         {list.length > 2 && <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700 }}>+{list.length - 2} more in Directory →</div>}
       </div>
     </button>
+  );
+}
+
+// ---------------- Curator contacts editor (prep before the draft) ----------------
+function CuratorContacts() {
+  const { doc, dispatch } = useDraft();
+  const issues = doc.items.filter((i) => i.type === 'issue');
+  const committees = doc.items.filter((i) => i.type === 'committee');
+  const [sortBy, setSortBy] = React.useState('issue'); // 'issue' | 'name'
+  // roster for the reuse dropdown = preloaded leadership + anyone already added (deduped)
+  const seen = {}; const roster = [];
+  const push = (name, title) => { const key = (name + '|' + (title || '')).toLowerCase(); if (!seen[key]) { seen[key] = true; roster.push({ name, title: title || '' }); } };
+  (WR.ROSTER || []).forEach((r) => push(r.name, r.title));
+  Object.values(doc.contacts || {}).forEach((arr) => (arr || []).forEach((c) => push(c.name, c.title)));
+  roster.sort((a, b) => a.name.localeCompare(b.name));
+
+  const sortedIssues = sortBy === 'name' ? [...issues].sort((a, b) => a.name.localeCompare(b.name)) : issues;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>Add the key people for each issue now, so they’re ready when you draft. The dropdown is preloaded with McGeorge &amp; Pacific leadership — please verify names/titles, they change.</span>
+        <div style={{ flex: 1 }} />
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>SORT</span>
+        {[['issue', 'By issue'], ['name', 'A–Z']].map(([v, l]) => (
+          <button key={v} onClick={() => setSortBy(v)} style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 700, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--line)', background: sortBy === v ? 'var(--accent)' : 'var(--panel-2)', color: sortBy === v ? 'var(--on-accent)' : 'var(--muted)' }}>{l}</button>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: 14, alignItems: 'start' }}>
+        {sortedIssues.map((iss) => <CuratorContactCard key={iss.id} iss={iss} roster={roster} />)}
+      </div>
+      <div className="mono" style={{ fontSize: 10.5, letterSpacing: '.12em', color: 'var(--muted)', margin: '20px 0 10px' }}>COMMITTEE CHAIRS (1–2 STUDENTS EACH)</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: 14, alignItems: 'start' }}>
+        {committees.map((c) => <CuratorContactCard key={c.id} iss={c} roster={roster} chair />)}
+      </div>
+    </div>
+  );
+}
+
+function CuratorContactCard({ iss, roster, chair }) {
+  const { doc, dispatch } = useDraft();
+  const list = (doc.contacts && doc.contacts[iss.id]) || [];
+  const [n, setN] = React.useState(''); const [tt, setTt] = React.useState('');
+  const add = () => { if (!n.trim()) return; dispatch({ t: 'contactAdd', issueId: iss.id, contact: { id: 'k' + Date.now() + Math.floor(Math.random() * 99), name: n.trim(), title: tt.trim() } }); setN(''); setTt(''); };
+  const pickExisting = (val) => {
+    if (!val) return; const [name, title] = val.split('|||');
+    dispatch({ t: 'contactAdd', issueId: iss.id, contact: { id: 'k' + Date.now() + Math.floor(Math.random() * 99), name, title: title || '' } });
+  };
+  return (
+    <div className="card" style={{ borderRadius: 13, padding: '13px 14px', borderTop: `4px solid ${WR.CATS[iss.cat].color}` }}>
+      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 9 }}>{chair ? '▸ ' : ''}{iss.name}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        {list.map((c) => (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 9px', borderRadius: 8, background: 'var(--panel-2)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 12.5 }}>{c.name}</div>{c.title && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.title}</div>}</div>
+            <button onClick={() => dispatch({ t: 'contactDel', issueId: iss.id, id: c.id })} style={{ ...cStep, width: 24, height: 24, fontSize: 12, color: '#d9483b' }}>✕</button>
+          </div>
+        ))}
+        {list.length === 0 && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{chair ? 'No chair set.' : 'No contacts yet.'}</div>}
+      </div>
+      {!chair && roster.length > 0 && (
+        <select value="" onChange={(e) => pickExisting(e.target.value)} style={{ ...cInput, width: '100%', fontSize: 12.5, marginBottom: 7 }}>
+          <option value="">+ Add from directory…</option>
+          {roster.map((r, i) => <option key={i} value={r.name + '|||' + r.title}>{r.name}{r.title ? ' — ' + r.title : ''}</option>)}
+        </select>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <input value={n} onChange={(e) => setN(e.target.value)} placeholder={chair ? 'Chair name (student)' : 'New contact name'} style={{ ...cInput, fontSize: 12.5 }} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input value={tt} onChange={(e) => setTt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} placeholder={chair ? 'Role (e.g. Chair, Co-chair)' : 'Title / role'} style={{ ...cInput, flex: 1, fontSize: 12.5 }} />
+          <button onClick={add} className="feature-bar" style={{ cursor: 'pointer', fontWeight: 700, fontSize: 12.5, padding: '0 14px', borderRadius: 8, border: 'none' }}>Add</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

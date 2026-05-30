@@ -83,7 +83,7 @@ function EditorPanel({ onClose }) {
           <button onClick={() => dispatch({ t: 'setCap', v: doc.capPaws - 1 })} style={stepBtn}>−</button>
           <span className="mono" style={{ fontWeight: 700, width: 30, textAlign: 'center' }}>{doc.capPaws}</span>
           <button onClick={() => dispatch({ t: 'setCap', v: doc.capPaws + 1 })} style={stepBtn}>+</button>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>paws · pool total {WR.totalPaws}</span>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>weight · pool total {WR.totalPaws}</span>
         </span>
         <div style={{ flex: 1 }} />
         <button onClick={() => { if (confirm('Reset the entire draft (picks, toss, sign-in)?')) { dispatch({ t: 'reset' }); onClose(); } }}
@@ -109,7 +109,7 @@ function ResultsPanel({ onClose }) {
   const shared = doc.items.filter((i) => doc.owners[i.id] === 'shared');
 
   const csv = () => {
-    const rows = [['Owner', 'Type', 'Item', 'Category', 'TigerPaws', 'PickOrder']];
+    const rows = [['Owner', 'Type', 'Item', 'Category', 'Weight', 'PickOrder']];
     doc.pickOrder.forEach((id, i) => { const it = doc.items.find((x) => x.id === id); if (it) rows.push([WR.VPS[doc.owners[id]].role, it.type, it.name, WR.CATS[it.cat].label, it.paws, i + 1]); });
     const blob = new Blob([rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sba-duty-draft.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -120,7 +120,7 @@ function ResultsPanel({ onClose }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <VPBadge role={role} size={34} />
         <div><div className="cond" style={{ fontSize: 18, fontWeight: 800, textTransform: 'uppercase', lineHeight: 1 }}>{doc.names[role] || WR.VPS[role].role}</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{items.length} PICKS · {load} PAWS</div></div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{items.length} PICKS · {load} WEIGHT</div></div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {items.map((m) => (
@@ -143,7 +143,7 @@ function ResultsPanel({ onClose }) {
         <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px dashed var(--line)' }}>
           <div className="mono" style={{ fontSize: 10.5, letterSpacing: '.14em', color: 'var(--muted)', marginBottom: 8 }}>SHARED / UNASSIGNED PILE ({shared.length})</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {shared.map((m) => <span key={m.id} style={{ fontSize: 12.5, fontWeight: 600, background: 'var(--panel-2)', borderRadius: 8, padding: '6px 11px' }}>{m.name} · {m.paws}🐾</span>)}
+            {shared.map((m) => <span key={m.id} style={{ fontSize: 12.5, fontWeight: 600, background: 'var(--panel-2)', borderRadius: 8, padding: '6px 11px' }}>{m.name} · wt {m.paws}</span>)}
           </div>
         </div>
       )}
@@ -157,10 +157,14 @@ function ResultsPanel({ onClose }) {
 
 // CSV export — shared helper so the review screen can reuse it.
 function exportCSV(doc) {
-  const rows = [['Owner', 'Type', 'Item', 'Category', 'TigerPaws']];
+  const rows = [['Owner', 'Type', 'Item', 'Category', 'Weight']];
   ['day', 'eve', 'shared'].forEach((r) => {
     doc.items.filter((i) => doc.owners[i.id] === r).forEach((it) => rows.push([WR.VPS[r].role, it.type, it.name, WR.CATS[it.cat].label, it.paws]));
   });
+  // Shared duties (Bylaws §5.02) — held jointly, included in every export
+  rows.push([], ['Shared Duties (Bylaws \u00a7 5.02) — held jointly by both Vice Presidents']);
+  WR.SHARED.duties.forEach((dd) => rows.push(['Both VPs', 'Shared duty', `${dd.k}. ${dd.t}`, '', '']));
+  WR.SHARED.alsoShared.forEach((t) => rows.push(['Both VPs', 'Shared duty', t, '', '']));
   const blob = new Blob([rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sba-duty-draft.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -176,14 +180,14 @@ function PrintArea() {
       <div style={{ textAlign: 'center', borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
         <div className="mono" style={{ fontSize: 11, letterSpacing: '.3em' }}>McGEORGE SBA · UNIVERSITY OF THE PACIFIC</div>
         <div className="cond" style={{ fontSize: 32, fontWeight: 900, textTransform: 'uppercase', margin: '4px 0' }}>The Duty Draft '26 — Allocation of Duties</div>
-        <div style={{ fontSize: 12, color: '#555' }}>{doc.phase === 'final' ? 'FINAL' : 'Draft'} · {new Date().toLocaleDateString()} · cap {doc.capPaws} paws/VP</div>
+        <div style={{ fontSize: 12, color: '#555' }}>{doc.phase === 'final' ? 'FINAL' : 'Draft'} · {new Date().toLocaleDateString()} · cap {doc.capPaws} per VP</div>
       </div>
       <div style={{ display: 'flex', gap: 48 }}>
         {rosters.map((r) => (
           <div key={r.role} style={{ flex: 1 }}>
             <div className="cond" style={{ fontSize: 19, fontWeight: 800, textTransform: 'uppercase', borderBottom: '1px solid #bbb', paddingBottom: 6, marginBottom: 9 }}>
               {doc.names[r.role] || WR.VPS[r.role].role}
-              <span style={{ float: 'right', fontFamily: '"JetBrains Mono",monospace', fontSize: 12, color: '#666' }}>{r.items.length} picks · {r.load} paws</span>
+              <span style={{ float: 'right', fontFamily: '"JetBrains Mono",monospace', fontSize: 12, color: '#666' }}>{r.items.length} picks · {r.load} weight</span>
             </div>
             {r.items.map((m) => (
               <div key={m.id} style={{ fontSize: 13.5, padding: '4px 0', marginLeft: m.type === 'committee' ? 18 : 0, borderBottom: '1px dotted #e3e3e3' }}>
@@ -199,8 +203,13 @@ function PrintArea() {
           <strong>Shared / Unassigned:</strong> {shared.map((m) => `${m.name} (${m.paws})`).join(' · ')}
         </div>
       )}
-      <div style={{ marginTop: 26, fontSize: 11, color: '#888', borderTop: '1px dashed #ccc', paddingTop: 10 }}>
-        Shared duties (Bylaws § 5.02) are held jointly by both Vice Presidents and are not part of this allocation.
+      <div style={{ marginTop: 26, paddingTop: 14, borderTop: '2px solid #111' }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 3 }}>Shared Duties — Bylaws § 5.02</div>
+        <div style={{ fontSize: 11.5, color: '#666', marginBottom: 9 }}>Held jointly by both Vice Presidents; not part of the draft allocation.</div>
+        {WR.SHARED.duties.map((dd) => (
+          <div key={dd.k} style={{ fontSize: 12.5, padding: '2px 0', lineHeight: 1.4 }}><strong>{dd.k}.</strong> {dd.t}</div>
+        ))}
+        <div style={{ fontSize: 12, color: '#444', marginTop: 8 }}><strong>Also shared:</strong> {WR.SHARED.alsoShared.join(' · ')}</div>
       </div>
     </div>
   );

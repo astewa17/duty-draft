@@ -74,6 +74,11 @@ function freshDoc() {
     firstPick: fp,
     year: cfg.year || "'26",
     capPaws: cfg.capDefault || WR.suggestedCap,
+    showChart: cfg.showChart !== undefined ? cfg.showChart : true,
+    showPhotos: cfg.showPhotos !== undefined ? cfg.showPhotos : false,
+    collabOn: cfg.collabOn !== undefined ? cfg.collabOn : false,
+    collab: {},                 // issueId -> [roles] supporting (besides owner)
+    vpPhotos: cfg.vpPhotos ? { ...cfg.vpPhotos } : { day: null, eve: null },
     items: pool.map((i) => ({ ...i })),
     contacts: cfg.contacts ? JSON.parse(JSON.stringify(cfg.contacts)) : {},
     owners: {},                 // itemId -> 'day'|'eve'|'shared'
@@ -103,12 +108,20 @@ function migrate(d) {
   if (!m.contacts || typeof m.contacts !== 'object') m.contacts = {};
   if (!m.firstPick) m.firstPick = 'toss';
   if (!m.year) m.year = "'26";
+  if (m.showChart === undefined) m.showChart = true;
+  if (m.showPhotos === undefined) m.showPhotos = false;
+  if (m.collabOn === undefined) m.collabOn = false;
+  if (!m.collab || typeof m.collab !== 'object') m.collab = {};
+  if (!m.vpPhotos || typeof m.vpPhotos !== 'object') m.vpPhotos = { day: null, eve: null };
   if (m.phase === 'results') m.phase = 'review';
   return m;
 }
 
+const SUPPORT_COST = 1; // a flagged collaboration costs the supporter this much cap
+const supportCount = (d, role) => Object.values(d.collab || {}).filter((arr) => Array.isArray(arr) && arr.includes(role)).length;
+
 const sel = {
-  load: (d, role) => d.items.filter((i) => d.owners[i.id] === role).reduce((s, i) => s + i.paws, 0),
+  load: (d, role) => d.items.filter((i) => d.owners[i.id] === role).reduce((s, i) => s + i.paws, 0) + supportCount(d, role) * SUPPORT_COST,
   owned: (d, role) => d.pickOrder.filter((id) => d.owners[id] === role).map((id) => d.items.find((i) => i.id === id)).filter(Boolean),
   available: (d) => d.items.filter((i) => !d.owners[i.id]),
   affordable: (d, item, role) => sel.load(d, role) + item.paws <= d.capPaws,
@@ -128,7 +141,7 @@ function finalize(d) {
   sel.available(d).forEach((i) => { d.owners[i.id] = 'shared'; if (!d.pickOrder.includes(i.id)) d.pickOrder.push(i.id); });
   d.phase = 'review'; d.pending = null; d.ready = { day: false, eve: false };
 }
-const loadOf = (d, r) => d.items.filter((i) => d.owners[i.id] === r).reduce((s, i) => s + i.paws, 0);
+const loadOf = (d, r) => d.items.filter((i) => d.owners[i.id] === r).reduce((s, i) => s + i.paws, 0) + supportCount(d, r) * SUPPORT_COST;
 const tradesUsed = (d, r) => d.trades.filter((t) => t.from === r && t.status !== 'withdrawn').length;
 
 function reduce(d, a) {
@@ -213,6 +226,23 @@ function reduce(d, a) {
     case 'reopen': d.phase = 'review'; d.ready = { day: false, eve: false }; break;
     // ---- curator (owner) edits; persist to CONFIG happens in the UI ----
     case 'setYear': d.year = a.v; break;
+    case 'setShowChart': d.showChart = a.v; break;
+    case 'setShowPhotos': d.showPhotos = a.v; break;
+    case 'setCollabOn': d.collabOn = a.v; if (!a.v) d.collab = {}; break;
+    case 'collabToggle': {
+      if (!d.collabOn) break;
+      const owner = d.owners[a.id];
+      if (!owner || owner === a.role || owner === 'shared') break;   // only support the OTHER VP's owned issue
+      const arr = d.collab[a.id] || [];
+      if (arr.includes(a.role)) { d.collab[a.id] = arr.filter((r) => r !== a.role); }
+      else {
+        if (supportCount(d, a.role) >= 2) break;                    // max 2 collaborations per VP
+        if (loadOf(d, a.role) + SUPPORT_COST > d.capPaws) break;     // cap guard: no overloading
+        d.collab[a.id] = [...arr, a.role];
+      }
+      break;
+    }
+    case 'setVpPhoto': d.vpPhotos = { ...(d.vpPhotos || {}), [a.role]: a.url }; break;
     case 'setFirstPick': d.firstPick = a.v; if (a.v === 'day' || a.v === 'eve') d.turn = a.v; break;
     case 'setPool': {
       d.items = a.items.map((i) => ({ ...i }));
@@ -340,10 +370,19 @@ function PawIcon({ size = 13, fill = 'currentColor', dim = false }) {
 }
 function Paws({ n, max = 5, size = 13, showNum = true }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} title={`${n} of ${max} tiger paws`}>
-      {Array.from({ length: max }).map((_, i) => (
-        <PawIcon key={i} size={size} fill={i < n ? 'var(--highlight)' : 'var(--muted)'} dim={i >= n} />
-      ))}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} title={`weight ${n} of ${max}`}>
+      {Array.from({ length: max }).map((_, i) => {
+        const fillFrac = Math.max(0, Math.min(1, n - i)); // 1 full, 0.5 half, 0 empty
+        if (fillFrac >= 1) return <PawIcon key={i} size={size} fill="var(--highlight)" />;
+        if (fillFrac <= 0) return <PawIcon key={i} size={size} fill="var(--muted)" dim />;
+        // half: dim base with a bright left-half overlay
+        return (
+          <span key={i} style={{ position: 'relative', width: size, height: size, display: 'inline-block', flex: '0 0 auto' }}>
+            <span style={{ position: 'absolute', inset: 0 }}><PawIcon size={size} fill="var(--muted)" dim /></span>
+            <span style={{ position: 'absolute', inset: 0, width: size * fillFrac, overflow: 'hidden' }}><PawIcon size={size} fill="var(--highlight)" /></span>
+          </span>
+        );
+      })}
       {showNum && <span className="mono" style={{ fontSize: size - 2, fontWeight: 700, marginLeft: 4, color: 'var(--muted)' }}>{n}</span>}
     </span>
   );
@@ -360,7 +399,7 @@ function CatTag({ cat }) {
 }
 
 // Real brand logos on a white chip so they read on every theme.
-const LOGO_SRC = { sba: 'assets/sba-seal.jpg', tiger: 'assets/pacific-tiger.png', vintage: 'assets/tiger-vintage.png' };
+const LOGO_SRC = { sba: 'assets/sba-seal.png', tiger: 'assets/pacific-tiger.png', vintage: 'assets/tiger-vintage.png' };
 function Logo({ which = 'sba', size = 44, pad = 0.12, title, bare = false }) {
   if (bare) {
     // transparent mark with a soft white halo (reads on dark) + faint depth (reads on light)
@@ -382,6 +421,17 @@ function Logo({ which = 'sba', size = 44, pad = 0.12, title, bare = false }) {
 
 function VPBadge({ role, size = 36, ring }) {
   const p = WR.VPS[role];
+  const ctx = React.useContext(DraftCtx);
+  const doc = ctx && ctx.doc;
+  const photo = doc && doc.showPhotos && doc.vpPhotos && doc.vpPhotos[role];
+  if (photo) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: '50%', flex: '0 0 auto', overflow: 'hidden', display: 'inline-block',
+        boxShadow: ring ? `0 0 0 3px ${ring}` : 'inset 0 0 0 1px rgba(0,0,0,.15)' }}>
+        <img src={photo} alt={p.short} draggable="false" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </span>
+    );
+  }
   return (
     <span style={{
       width: size, height: size, borderRadius: '50%', flex: '0 0 auto',
@@ -389,6 +439,42 @@ function VPBadge({ role, size = 36, ring }) {
       fontWeight: 800, fontSize: size * 0.34, letterSpacing: '.02em', fontFamily: '"Saira Condensed", sans-serif',
       boxShadow: ring ? `0 0 0 3px ${ring}` : 'none',
     }}>{p.short}</span>
+  );
+}
+
+// Donut chart: a VP's owned weight split by category. Pure, reads doc.
+function CategoryDonut({ role, size = 132 }) {
+  const { doc } = useDraft();
+  const owned = doc.items.filter((i) => doc.owners[i.id] === role);
+  const byCat = {};
+  owned.forEach((i) => { byCat[i.cat] = (byCat[i.cat] || 0) + i.paws; });
+  const total = Object.values(byCat).reduce((s, n) => s + n, 0);
+  const cats = Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]);
+  if (total === 0) {
+    return <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>No picks yet — the focus chart fills in as {WR.VPS[role].short} drafts.</div>;
+  }
+  let acc = 0; const stops = [];
+  cats.forEach((c) => { const frac = byCat[c] / total; const col = WR.CATS[c].color; stops.push(`${col} ${(acc * 100).toFixed(1)}% ${((acc + frac) * 100).toFixed(1)}%`); acc += frac; });
+  const ringW = Math.round(size * 0.17);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', flex: '0 0 auto', position: 'relative',
+        background: `conic-gradient(${stops.join(',')})` }}>
+        <div style={{ position: 'absolute', inset: ringW, borderRadius: '50%', background: 'var(--panel)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span className="cond" style={{ fontSize: size * 0.26, fontWeight: 800, lineHeight: 1 }}>{owned.length}</span>
+          <span className="mono" style={{ fontSize: 8.5, color: 'var(--muted)', letterSpacing: '.1em' }}>PICKS</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+        {cats.map((c) => (
+          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: WR.CATS[c].color, flex: '0 0 auto' }} />
+            <span style={{ flex: 1, color: 'var(--on-panel)' }}>{WR.CATS[c].label}</span>
+            <span className="mono" style={{ color: 'var(--muted)', fontWeight: 700 }}>{Math.round((byCat[c] / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -414,4 +500,4 @@ function ThemeBar() {
   );
 }
 
-Object.assign(window, { DraftProvider, useDraft, Emblem, Logo, PawIcon, Paws, CatTag, VPBadge, ThemeBar, Sounds, loadOf, tradesUsed });
+Object.assign(window, { DraftProvider, useDraft, Emblem, Logo, PawIcon, Paws, CatTag, VPBadge, CategoryDonut, ThemeBar, Sounds, loadOf, tradesUsed });

@@ -16,7 +16,7 @@ function Shell() {
   React.useEffect(() => { document.documentElement.style.setProperty('--tw-accent', t.accent); }, [t.accent]);
 
   let screen;
-  if (doc.phase === 'signin') screen = <SignIn />;
+  if (doc.phase === 'signin') screen = <SignIn onOpen={setOverlay} />;
   else if (doc.phase === 'toss') screen = <CoinToss />;
   else if (doc.phase === 'draft') screen = <Board onOpen={setOverlay} solo={solo} setSolo={setSolo} />;
   else screen = <ReviewRoom onOpen={setOverlay} />;
